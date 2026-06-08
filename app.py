@@ -106,7 +106,7 @@ with st.sidebar.expander("🌾 CONFIGURATION COMMERCIALE", expanded=False):
     alpha_v    = ALPHA_LEVELS[alpha]
     corr_method = st.selectbox("Correction tests multiples", list(CORRECTION_METHODS.keys()))
 
-# 🛠️ FONCTIONS STATISTIQUES REPRISES ET SÉCURISÉES
+# 🛠️ FONCTIONS STATISTIQUES
 def bootstrap_ci(data, stat_fn=np.mean, n=5000, ci=0.95):
     rng = np.random.default_rng(42)
     boot_stats = np.array([stat_fn(rng.choice(data, len(data), replace=True)) for _ in range(n)])
@@ -222,6 +222,9 @@ if page == "1. 🚜 Pré-traitement & Nettoyage":
                             df_work.columns = df_work.columns.str.lower().str.strip()
                             st.session_state.n_initial_points = len(df_work)
 
+                            # Identifiant unique temporaire pour séparer plus tard le brut du propre
+                            df_work['id_unique_point'] = range(len(df_work))
+
                             # 1. Conversions des unités machines
                             if coupe_unit == "Feet (Pieds)" and 'largeur' in df_work.columns:
                                 df_work['largeur_m'] = df_work['largeur'] * 0.3048
@@ -242,12 +245,8 @@ if page == "1. 🚜 Pré-traitement & Nettoyage":
                                 df_work = df_work[(df_work['temps'] >= temps_range[0]) & (df_work['temps'] <= temps_range[1])]
                             df_work = df_work[(df_work['largeur_m'] >= coupe_range[0]) & (df_work['largeur_m'] <= coupe_range[1])]
 
-                            # ==================================================
                             # 3. LA SONDE DE POTENTIEL PAR NUMÉRO DE PIXEL
-                            # ==================================================
                             coord_list = [(pt.x, pt.y) for pt in df_work.geometry]
-                            
-                            # Lecture directe du chiffre inscrit dans le raster
                             num_zones = [int(x[0]) for x in src_raster.sample(coord_list)]
                             df_work['potentiel'] = [f"Zone {n}" for n in num_zones]
 
@@ -259,7 +258,11 @@ if page == "1. 🚜 Pré-traitement & Nettoyage":
                             std_rdt = df_work['rdt'].std()
                             df_work = df_work[(df_work['rdt'] >= mean_rdt - 2*std_rdt) & (df_work['rdt'] <= mean_rdt + 2*std_rdt)]
 
-                            st.session_state.gdf_brut = gdf_bat.to_crs(epsg=4326)
+                            # SAUVEGARDE STRICTE : Le brut complet ET le propre convertis en EPSG:4326 (GPS)
+                            st.session_state.gdf_brut = gdf_bat_m.to_crs(epsg=4326)
+                            st.session_state.gdf_brut.columns = st.session_state.gdf_brut.columns.str.lower().str.strip()
+                            st.session_state.gdf_brut['id_unique_point'] = range(len(st.session_state.gdf_brut))
+                            
                             st.session_state.df_propre = df_work.to_crs(epsg=4326)
                             
                             st.balloons()
@@ -317,7 +320,7 @@ elif page == "2. 📈 Synthèse & Statistiques":
     </div>"""
     st.markdown(html, unsafe_allow_html=True)
 
-    tab_rdt, tab_boot, tab_anova, tab_map = st.tabs(["📊 Distributions", "🎲 Bootstrap", "📐 ANOVA par Numéro", "🗺️ Carte finale"])
+    tab_rdt, tab_boot, tab_anova, tab_map = st.tabs(["📊 Distributions", "🎲 Bootstrap", "📐 ANOVA par Numéro", "🗺️ Carte diagnostic"])
 
     with tab_rdt:
         st.markdown('<div class="vulgarisation">💡 <b>Comprendre cette page :</b> Les graphiques montrent la structure de vos points épurés de tout bruit.</div>', unsafe_allow_html=True)
@@ -342,15 +345,108 @@ elif page == "2. 📈 Synthèse & Statistiques":
             if has_pot:
                 st.plotly_chart(px.box(df_final, x="potentiel", y="rdt", color="grp", color_discrete_map={'Produit': '#2ecc71', 'Témoin': '#e74c3c'}), use_container_width=True)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # MODIFICATION COMPLÈTE ICI : ONGLETTES CARTE DIAGNOSTIC (CONSERVÉ VS SUPPRIMÉ)
+    # ─────────────────────────────────────────────────────────────────────────
     with tab_map:
+        st.markdown('<div class="vulgarisation">💡 <b>Carte de Diagnostic Interactive :</b> Les points colorés représentent vos données valides retenues pour l\'étude statistique. Les points <b>gris</b> représentent les anomalies ou zones de bordures éliminées par vos filtres batteuse.</div>', unsafe_allow_html=True)
         try:
-            gdf_plot = df_final.copy()
-            gdf_plot['lat'] = gdf_plot.geometry.centroid.y
-            gdf_plot['lon'] = gdf_plot.geometry.centroid.x
-            fig_map = px.scatter_mapbox(gdf_plot, lat="lat", lon="lon", color="rdt", size="rdt", size_max=12, color_continuous_scale="RdYlGn", mapbox_style="open-street-map", zoom=16)
-            fig_map.update_layout(height=600, margin={"r": 0, "t": 40, "l": 0, "b": 0})
+            # 1. On récupère la couche brute complète de la session
+            gdf_complet = st.session_state.gdf_brut.copy()
+            
+            # Extraction des coordonnées GPS
+            gdf_complet['lat'] = gdf_complet.geometry.centroid.y
+            gdf_complet['lon'] = gdf_complet.geometry.centroid.x
+
+            # 2. On identifie quels points de la couche brute sont présents dans la couche propre
+            liste_id_propres = df_final['id_unique_point'].tolist()
+            
+            # On applique le statut de tri
+            gdf_complet['statut_point'] = gdf_complet['id_unique_point'].apply(
+                lambda x: 'Point Validé' if x in liste_id_propres else 'Point Supprimé (Filtre)'
+            )
+
+            # 3. Pour les points validés, on vient ré-injecter la valeur réelle du rdt propre
+            # Pour les points supprimés, on force une valeur ou un affichage distinct
+            gdf_complet = gdf_complet.merge(
+                df_final[['id_unique_point', 'rdt', 'potentiel']], 
+                on='id_unique_point', 
+                how='left', 
+                suffixes=('_brut', '_propre')
+            )
+            
+            # Si le point est supprimé, on n'affiche pas son rendement dans le dégradé de couleur
+            gdf_complet['rdt_carte'] = gdf_complet['rdt_propre']
+
+            # Option d'affichage pour l'utilisateur
+            affichage_choix = st.radio(
+                "Options d'affichage cartographique :",
+                ["Afficher tout le diagnostic (Validés + Supprimés en Gris)", "Afficher uniquement les points validés (Carte propre)"],
+                horizontal=True
+            )
+
+            # Filtrage selon le choix
+            if affichage_choix == "Afficher uniquement les points validés (Carte propre)":
+                gdf_dessin = gdf_complet[gdf_complet['statut_point'] == 'Point Validé']
+            else:
+                gdf_dessin = gdf_complet
+
+            # Définition du centre géographique
+            center_lat = float(gdf_complet['lat'].median())
+            center_lon = float(gdf_complet['lon'].mean())
+
+            # Construction de la carte Plotly Graph Objects pour mélanger un dégradé de couleur et du gris
+            fig_map = go.Figure()
+
+            # Trace 1 : Les points supprimés (Si demandés, dessinés en gris discret)
+            if affichage_choix == "Afficher tout le diagnostic (Validés + Supprimés en Gris)":
+                df_suppr = gdf_dessin[gdf_dessin['statut_point'] == 'Point Supprimé (Filtre)']
+                fig_map.add_trace(go.Scattermapbox(
+                    lat=df_suppr['lat'],
+                    lon=df_suppr['lon'],
+                    mode='markers',
+                    marker=dict(size=5, color='#bdc3c7', opacity=0.4),
+                    name='Points Éliminés (Bordures/Bugs)',
+                    hoverinfo='text',
+                    text=[f"Statut : Rejeté par le filtre<br>Rdt brut : {r:.1f} qtx" if 'rdt_brut' in df_suppr.columns else "Rejeté" for r in df_suppr['rdt_brut']]
+                ))
+
+            # Trace 2 : Les points validés (Colorés du rouge au vert selon le rendement propre)
+            df_valides = gdf_dessin[gdf_dessin['statut_point'] == 'Point Validé']
+            
+            fig_map.add_trace(go.Scattermapbox(
+                lat=df_valides['lat'],
+                lon=df_valides['lon'],
+                mode='markers',
+                marker=dict(
+                    size=8,
+                    color=df_valides['rdt_carte'],
+                    colorscale='RdYlGn',
+                    showscale=True,
+                    colorbar=dict(title="Rendement Net (qtx)"),
+                    opacity=0.9
+                ),
+                name='Points Validés (Conservés)',
+                hoverinfo='text',
+                text=[f"Bande : {b}<br>Zone Sol : {z}<br><b>Rdt Net : {r:.1f} qtx</b>" for b, z, r in zip(df_valides['bande'] if 'bande' in df_valides.columns else ['Inconnu']*len(df_valides), df_valides['potentiel'], df_valides['rdt_carte'])]
+            ))
+
+            # Mise en page du fond de plan OpenStreetMap
+            fig_map.update_layout(
+                mapbox=dict(
+                    style="open-street-map",
+                    zoom=16,
+                    center=dict(lat=center_lat, lon=center_lon)
+                ),
+                height=650,
+                margin={"r": 0, "t": 40, "l": 0, "b": 0},
+                title="Suivi spatial du nettoyage (Validation des données de récolte)"
+            )
+            
             st.plotly_chart(fig_map, use_container_width=True)
-        except Exception as e: st.warning(f"Carte indisponible : {e}")
+            
+        except Exception as e: 
+            st.warning(f"Carte diagnostic indisponible : {e}")
 
     # ── EXPORT DU RAPPORT ────────────────────────────────────────────────────
     st.divider()
