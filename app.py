@@ -781,6 +781,7 @@ En essais grandes bandes avec **2-4 zones de potentiel**, **Holm-Šídák est re
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 6 — Carte parcelle
 # ─────────────────────────────────────────────────────────────────────────────
+
 with tab_map:
     if 'geometry' not in gdf.columns:
         st.info("Géométrie non disponible.")
@@ -789,29 +790,43 @@ with tab_map:
             gdf_plot = gdf.copy()
             gdf_plot.columns = gdf_plot.columns.str.lower().str.strip()
             gdf_plot['grp'] = gdf_plot['bande'].apply(lambda x: 'Produit' if x == val_p else 'Témoin')
+            
+            # Fusion en spécifiant des suffixes clairs pour éviter le piège
             gdf_plot = gdf_plot.merge(
                 df_final[['rdt']].assign(idx=df_final.index),
-                left_index=True, right_on='idx', how='left'
+                left_index=True, right_on='idx', how='left',
+                suffixes=('_brut', '_nettoye')
             )
- 
+
+            # Sécurité : Si le filtre IQR est désactivé, 'rdt_nettoye' peut contenir des NaN, 
+            # on crée une colonne propre pour Plotly
+            gdf_plot['rdt_carte'] = gdf_plot['rdt_nettoye'].fillna(gdf_plot['rdt_brut'])
+
             fig_map = px.choropleth_mapbox(
-                gdf_plot, geojson=gdf_plot.__geo_interface__,
-                locations=gdf_plot.index, color='rdt',
+                gdf_plot, 
+                geojson=gdf_plot.__geo_interface__,
+                locations=gdf_plot.index, 
+                color='rdt_carte',  # On utilise la nouvelle colonne sécurisée
                 color_continuous_scale='RdYlGn',
                 mapbox_style="carto-positron",
                 zoom=12,
                 center={"lat": gdf_plot.geometry.centroid.y.mean(),
                         "lon": gdf_plot.geometry.centroid.x.mean()},
                 opacity=0.75,
-                hover_data={c: True for c in ['bande', 'rdt', 'potentiel'] if c in gdf_plot.columns},
-                labels={'rdt': 'Rendement (qtx/ha)'},
-                title="Carte de rendement géoréférencée"
+                # On ajuste également les info-bulles (hover) au survol de la carte
+                hover_data={
+                    'bande': True, 
+                    'rdt_carte': ':.1f', 
+                    'potentiel': True
+                } if 'potentiel' in gdf_plot.columns else {'bande': True, 'rdt_carte': ':.1f'},
+                labels={'rdt_carte': 'Rendement (qtx/ha)'},
+                title="Carte de rendement géoréférencée (Post-IQR)"
             )
             fig_map.update_layout(height=550, margin={"r": 0, "t": 40, "l": 0, "b": 0})
             st.plotly_chart(fig_map, use_container_width=True)
+            
         except Exception as e:
             st.warning(f"Carte indisponible : {e}")
- 
  
 # ══════════════════════════════════════════════════════════════════════════════
 # 8. EXPORT RAPPORT
