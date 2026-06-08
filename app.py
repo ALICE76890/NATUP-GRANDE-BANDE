@@ -756,17 +756,16 @@ Sans correction, le risque d'erreur de type I (faux positif) augmente avec chaqu
 En essais grandes bandes avec **2-4 zones de potentiel**, **Holm-Šídák est recommandé**.
 """)
  
- 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 6 — Carte parcelle
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_map:
-    if 'geometry' not in gdf.columns:
-        st.info("Géométrie non disponible.")
+    if 'geometry' not in gdf.columns or gdf.empty:
+        st.info("Géométrie non disponible ou fichier vide.")
     else:
         try:
-            # 1. Préparation de la couche de base
-            gdf_plot = gdf.copy()
+            # 1. Copie et conversion explicite en EPSG:4326 (WGS84 - Degrés GPS)
+            gdf_plot = gdf.copy().to_crs(epsg=4326)
             gdf_plot.columns = gdf_plot.columns.str.lower().str.strip()
             gdf_plot['grp'] = gdf_plot['bande'].apply(lambda x: 'Produit' if x == val_p else 'Témoin')
             
@@ -777,11 +776,26 @@ with tab_map:
             )
             gdf_plot['rdt_carte'] = gdf_plot['rdt_nettoye'].fillna(gdf_plot['rdt_brut'])
 
-            # Extraction sécurisée des coordonnées des points ou des centres de polygones
-            gdf_plot['lat'] = gdf_plot.geometry.centroid.y
-            gdf_plot['lon'] = gdf_plot.geometry.centroid.x
+            # --- CORRECTION ET SÉCURISATION DES AXES ---
+            # Calcul des centroïdes bruts
+            centroids = gdf_plot.geometry.centroid
+            raw_y = centroids.y.dropna().values
+            raw_x = centroids.x.dropna().values
 
-            # 2. Sélection du mode d'affichage
+            if len(raw_y) > 0 and len(raw_x) > 0:
+                # En France, la latitude (Y) doit être plus grande que la longitude (X). 
+                # Si la moyenne de Y est plus petite que la moyenne de X, c'est qu'il y a inversion.
+                if np.abs(np.mean(raw_y)) < np.abs(np.mean(raw_x)):
+                    gdf_plot['lat'] = raw_x
+                    gdf_plot['lon'] = raw_y
+                else:
+                    gdf_plot['lat'] = raw_y
+                    gdf_plot['lon'] = raw_x
+            else:
+                st.error("❌ Impossible d'extraire les coordonnées géographiques.")
+                st.stop()
+
+            # 2. Options de sélection du mode d'affichage
             st.markdown("### 🗺️ Options de visualisation spatiale")
             mode_carte = st.radio(
                 "Sélectionnez le niveau de détail de la carte :",
@@ -789,15 +803,12 @@ with tab_map:
                 horizontal=True
             )
 
-            # Recentrage universel
-            bounds = gdf_plot.total_bounds
-            center_lon = (bounds[0] + bounds[2]) / 2
-            center_lat = (bounds[1] + bounds[3]) / 2
+            # Recalcul dynamique du centre de la carte à partir des points corrigés
+            center_lat = float(gdf_plot['lat'].mean())
+            center_lon = float(gdf_plot['lon'].mean())
 
             # --- CAS 1 : VUE SYNTHÈSE PAR ZONE DE POTENTIEL ---
             if mode_carte == "Synthèse par Zone de Potentiel" and 'potentiel' in gdf_plot.columns:
-                
-                # On utilise un groupby standard sur les coordonnées pour éviter les bugs de polygones lourds
                 df_pot_carte = gdf_plot.groupby('potentiel').agg({
                     'rdt_carte': 'mean',
                     'lat': 'mean',
@@ -812,10 +823,10 @@ with tab_map:
                     lon="lon",
                     color="potentiel",
                     size="rdt_moyen",
-                    size_max=25,
+                    size_max=20,
                     color_discrete_sequence=px.colors.qualitative.Bold,
                     mapbox_style="open-street-map",
-                    zoom=14,
+                    zoom=15,  # Zoom augmenté pour voir la parcelle de près
                     center={"lat": center_lat, "lon": center_lon},
                     hover_data={'potentiel': True, 'rdt_moyen': True, 'lat': False, 'lon': False},
                     labels={'rdt_moyen': 'Rdt Moyen (qtx/ha)', 'potentiel': 'Zone de Potentiel'},
@@ -833,10 +844,10 @@ with tab_map:
                     lon="lon",
                     color="rdt_carte",
                     size="rdt_carte",
-                    size_max=12,
+                    size_max=10,
                     color_continuous_scale="RdYlGn",
                     mapbox_style="open-street-map",
-                    zoom=14,
+                    zoom=15,  # Zoom augmenté pour zoomer directement sur la parcelle
                     center={"lat": center_lat, "lon": center_lon},
                     opacity=0.8,
                     hover_data={
@@ -853,7 +864,8 @@ with tab_map:
             st.plotly_chart(fig_map, use_container_width=True)
             
         except Exception as e:
-            st.warning(f"Carte indisponible : {e}")
+            st.warning(f"Carte indisponible : {e}") 
+
  
 # ══════════════════════════════════════════════════════════════════════════════
 # 8. EXPORT RAPPORT
