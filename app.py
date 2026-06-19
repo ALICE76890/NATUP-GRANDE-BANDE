@@ -4,13 +4,12 @@ import geopandas as gpd
 import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
-import requests
 import io
 import zipfile
 import os
 import numpy as np
 import shutil
-from datetime import datetime, date, timedelta
+from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -29,20 +28,61 @@ st.set_page_config(page_title="Bio-Expert 360", layout="wide", page_icon="🌱",
 
 st.markdown("""
 <style>
-html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
-[data-testid="stMetricValue"] { font-size: 1.5rem; font-weight: 700; color:#1b4332; }
-[data-testid="stMetric"] {
-    background: #ffffff; border-radius: 14px; padding: 14px 16px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06); border: 1px solid #eef1ee;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+.main { background: #fafbf9; }
+
+.hero {
+    background: linear-gradient(120deg, #1b4332 0%, #2d6a4f 55%, #40916c 100%);
+    border-radius: 18px; padding: 28px 32px; margin-bottom: 22px;
+    box-shadow: 0 8px 24px rgba(27,67,50,0.25);
 }
-h1, h2, h3 { color:#1b4332; }
-.verdict-sig   { background:linear-gradient(135deg,#d4edda,#c3e6cb); border-left:6px solid #28a745; padding:16px 20px; border-radius:10px; color:#155724; font-size:1.05rem; }
-.verdict-nosig { background:linear-gradient(135deg,#f8d7da,#f1c0c5); border-left:6px solid #dc3545; padding:16px 20px; border-radius:10px; color:#721c24; font-size:1.05rem; }
-.stress-high   { background:#fdecea; border-left:6px solid #e74c3c; padding:14px 18px; border-radius:10px; color:#7b241c; }
-.stress-low    { background:#eafaf1; border-left:6px solid #27ae60; padding:14px 18px; border-radius:10px; color:#145a32; }
-.vulgarisation { background:#f4f6f5; border-left:4px solid #52796f; padding:12px 16px; margin-bottom:10px; border-radius:8px; font-size:0.92rem; }
-.section-title { font-size:1.3rem; font-weight:700; color:#1b4332; margin-top:8px; }
+.hero h1 { color: #fff; margin: 0; font-size: 2.1rem; font-weight: 800; }
+.hero p  { color: #d8f3dc; margin: 4px 0 0 0; font-size: 1rem; }
+
+[data-testid="stMetricValue"] { font-size: 1.55rem; font-weight: 800; color:#1b4332; }
+[data-testid="stMetricLabel"] { font-weight: 600; color:#52796f; }
+[data-testid="stMetric"] {
+    background: #ffffff; border-radius: 16px; padding: 16px 18px;
+    box-shadow: 0 3px 14px rgba(27,67,50,0.07); border: 1px solid #eef2ef;
+    transition: transform .15s ease;
+}
+[data-testid="stMetric"]:hover { transform: translateY(-2px); }
+
+h1, h2, h3 { color:#1b4332; font-weight: 800; }
+h2 { border-bottom: 3px solid #d8f3dc; padding-bottom: 6px; }
+
+.verdict-sig {
+    background: linear-gradient(135deg,#d8f3dc,#b7e4c7); border-left:6px solid #2d6a4f;
+    padding:18px 22px; border-radius:14px; color:#1b4332; font-size:1.05rem;
+    box-shadow: 0 4px 14px rgba(45,106,79,0.12);
+}
+.verdict-nosig {
+    background: linear-gradient(135deg,#fde2e2,#f8c6c6); border-left:6px solid #c0392b;
+    padding:18px 22px; border-radius:14px; color:#7b241c; font-size:1.05rem;
+    box-shadow: 0 4px 14px rgba(192,57,43,0.10);
+}
+
+.vulgarisation {
+    background:#f1f5f2; border-left:4px solid #74a892; padding:14px 18px;
+    margin-bottom:14px; border-radius:10px; font-size:0.92rem; color:#33433a;
+}
+
+.badge {
+    display:inline-block; padding:3px 12px; border-radius:20px; font-size:0.78rem;
+    font-weight:700; margin-right:6px;
+}
+.badge-orange { background:#ffe8cc; color:#a65c00; }
+.badge-blue { background:#d6e9f8; color:#1b4f72; }
+
 hr { border-top: 1px solid #e0e4e1; }
+
+.stTabs [data-baseweb="tab-list"] { gap: 6px; }
+.stTabs [data-baseweb="tab"] {
+    background:#f1f5f2; border-radius:10px 10px 0 0; padding:10px 18px; font-weight:600;
+}
+.stTabs [aria-selected="true"] { background:#2d6a4f !important; color:#fff !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -53,54 +93,37 @@ def clear_temp():
     os.makedirs("temp")
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# 2. RÉFÉRENTIEL CULTURES (utilisé pour les seuils de stress thermique)
-# ══════════════════════════════════════════════════════════════════════════
-PARAM_CULTURES = {
-    "Blé Tendre": {"t_echaudage": 25, "t_critique": 30, "t_gel": -2, "precip_min_jour": 0.5},
-    "Maïs":       {"t_echaudage": 32, "t_critique": 36, "t_gel": 0,  "precip_min_jour": 0.5},
-    "Orge":       {"t_echaudage": 25, "t_critique": 30, "t_gel": -3, "precip_min_jour": 0.5},
-    "Colza":      {"t_echaudage": 27, "t_critique": 32, "t_gel": -5, "precip_min_jour": 0.5},
-}
 ALPHA_LEVELS = {"5 % (standard)": 0.05, "1 % (strict)": 0.01, "10 % (exploratoire)": 0.10}
 
 # ══════════════════════════════════════════════════════════════════════════
-# 3. SIDEBAR
+# 2. SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.title("🌱 Bio-Expert 360")
-    st.caption("Analyse d'essais en bandes — v3.0")
+    st.markdown("## 🌱 Bio-Expert 360")
+    st.caption("Analyse statistique d'essais en bandes — v4.0")
+    st.divider()
 
     with st.expander("📥 IMPORTATION DONNÉES", expanded=True):
         uploaded_file = st.file_uploader("Fichier QGIS (.zip)", type=["zip"])
         st.caption("Colonnes attendues : `bande`, `rdt`, `potentiel` (optionnel)")
 
     with st.expander("🌾 CONFIGURATION ESSAI", expanded=True):
-        culture = st.selectbox("Culture", list(PARAM_CULTURES.keys()))
-        d_semis = st.date_input("Date de Semis", date(2024, 10, 20))
-        d_appli = st.date_input("Date d'Application produit", date(2025, 3, 10))
-        d_recolt = st.date_input("Date de Récolte", date(2025, 7, 15))
+        culture = st.selectbox("Culture", ["Blé Tendre", "Maïs", "Orge", "Colza", "Tournesol", "Autre"])
         alpha = st.selectbox("Seuil de significativité α", list(ALPHA_LEVELS.keys()))
         alpha_v = ALPHA_LEVELS[alpha]
         clean_iqr = st.checkbox("Nettoyage strict des outliers (IQR 1.2)", value=True)
 
     with st.expander("📊 OPTIONS STATISTIQUES", expanded=True):
-        run_anova = st.checkbox("Activer l'ANOVA spatiale (si zones de potentiel)", value=True)
+        run_anova = st.checkbox("Activer l'ANOVA spatiale (si ≥ 2 zones de potentiel)", value=True)
+        st.caption("Le test de comparaison principal est toujours choisi automatiquement.")
 
     with st.expander("💰 ÉCONOMIE", expanded=True):
         prix_vente = st.number_input("Prix de vente (€/T)", value=210)
         cout_prod = st.number_input("Coût Produit (€/ha)", value=45)
 
-    with st.expander("🌦️ MÉTÉO", expanded=True):
-        st.caption("La position est déduite automatiquement du centre de votre parcelle. "
-                    "Vous pouvez la corriger manuellement si besoin.")
-        manual_coords = st.checkbox("Forcer des coordonnées manuelles")
-        man_lat = st.number_input("Latitude", value=48.85, format="%.4f") if manual_coords else None
-        man_lon = st.number_input("Longitude", value=2.35, format="%.4f") if manual_coords else None
-
 
 # ══════════════════════════════════════════════════════════════════════════
-# 4. FONCTIONS STATISTIQUES (simplifiées)
+# 3. MOTEUR STATISTIQUE — sélection automatique et adaptative du test
 # ══════════════════════════════════════════════════════════════════════════
 def cohen_d(a, b):
     na, nb = len(a), len(b)
@@ -118,29 +141,43 @@ def interpret_d(d):
 
 
 def run_main_test(data_p, data_t, alpha_v=0.05):
-    """Un seul test, auto-sélectionné selon normalité/homogénéité — résultat simple et lisible."""
+    """
+    Sélectionne automatiquement le test le plus adapté à l'échantillon :
+    - n trop petit (< 8 par groupe) : Shapiro non fiable, on bascule directement
+      vers Mann-Whitney (non-paramétrique), plus prudent sur petits échantillons.
+    - n suffisant : on teste normalité (Shapiro) + homogénéité des variances (Levene)
+      puis on choisit Student / Welch / Mann-Whitney en conséquence.
+    """
     n_p, n_t = len(data_p), len(data_t)
-    _, p_shap_p = stats.shapiro(data_p) if n_p >= 3 else (None, None)
-    _, p_shap_t = stats.shapiro(data_t) if n_t >= 3 else (None, None)
-    _, p_lev = stats.levene(data_p, data_t)
+    small_sample = n_p < 8 or n_t < 8
 
-    normal = (p_shap_p or 0) > alpha_v and (p_shap_t or 0) > alpha_v
-    homog = p_lev > alpha_v
+    p_shap_p = p_shap_t = p_lev = None
 
-    if normal and homog:
-        t_stat, p_main = stats.ttest_ind(data_p, data_t)
-        test_nom = "Test de Student (paramétrique)"
-    elif normal:
-        t_stat, p_main = stats.ttest_ind(data_p, data_t, equal_var=False)
-        test_nom = "Test de Welch (variances inégales)"
-    else:
+    if small_sample:
         t_stat, p_main = stats.mannwhitneyu(data_p, data_t, alternative='two-sided')
-        test_nom = "Test de Mann-Whitney (non-paramétrique)"
+        test_nom = "Mann-Whitney U (échantillon réduit → test robuste)"
+    else:
+        _, p_shap_p = stats.shapiro(data_p)
+        _, p_shap_t = stats.shapiro(data_t)
+        _, p_lev = stats.levene(data_p, data_t)
+        normal = p_shap_p > alpha_v and p_shap_t > alpha_v
+        homog = p_lev > alpha_v
+
+        if normal and homog:
+            t_stat, p_main = stats.ttest_ind(data_p, data_t)
+            test_nom = "Test de Student (paramétrique)"
+        elif normal:
+            t_stat, p_main = stats.ttest_ind(data_p, data_t, equal_var=False)
+            test_nom = "Test de Welch (variances inégales)"
+        else:
+            t_stat, p_main = stats.mannwhitneyu(data_p, data_t, alternative='two-sided')
+            test_nom = "Mann-Whitney U (non-paramétrique)"
 
     d = cohen_d(data_p.values, data_t.values)
     return {
         'name': test_nom, 'p': p_main, 'd': d, 'label': interpret_d(d),
         'shapiro_p': p_shap_p, 'shapiro_t': p_shap_t, 'levene_p': p_lev,
+        'small_sample': small_sample,
     }
 
 
@@ -148,10 +185,12 @@ def run_anova_analysis(df_final, alpha_v=0.05):
     if not HAS_STATSMODELS:
         return None, "statsmodels non installé.", None, False
     if 'potentiel' not in df_final.columns:
-        return None, "Colonne 'potentiel' absente du fichier.", None, False
+        return None, "Colonne 'potentiel' absente du fichier : l'ANOVA spatiale nécessite des zones de sol.", None, False
     nb_zones = df_final['potentiel'].dropna().nunique()
     if nb_zones <= 1:
-        return None, "Au moins 2 zones de potentiel différentes sont nécessaires pour l'ANOVA.", None, False
+        return None, ("Une seule zone de potentiel détectée. L'ANOVA à 2 facteurs n'a de sens que pour "
+                       "croiser le traitement avec le sol — sans variation de sol, elle se réduirait au "
+                       "test principal déjà calculé. Ajoutez au moins 2 zones de potentiel pour l'activer."), None, False
 
     formula = "rdt ~ C(grp) + C(potentiel) + C(grp):C(potentiel)"
     try:
@@ -163,75 +202,15 @@ def run_anova_analysis(df_final, alpha_v=0.05):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 5. FONCTION MÉTÉO (Open-Meteo, gratuit, sans clé API)
-# ══════════════════════════════════════════════════════════════════════════
-@st.cache_data(show_spinner=False)
-def fetch_weather(lat, lon, start, end):
-    """Récupère les données météo journalières (historique ou prévision) via Open-Meteo."""
-    today = date.today()
-    url_parts = []
-    start_str, end_str = str(start), str(end)
-
-    # Historique (archive) pour les dates passées
-    if start < today:
-        archive_end = min(end, today - timedelta(days=1))
-        if start <= archive_end:
-            url = ("https://archive-api.open-meteo.com/v1/archive"
-                   f"?latitude={lat}&longitude={lon}&start_date={start}&end_date={archive_end}"
-                   "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
-                   "&timezone=auto")
-            url_parts.append(url)
-
-    # Prévision pour les dates futures (jusqu'à ~16j) — sinon ignoré
-    if end >= today:
-        forecast_start = max(start, today)
-        if forecast_start <= end:
-            url = ("https://api.open-meteo.com/v1/forecast"
-                   f"?latitude={lat}&longitude={lon}&start_date={forecast_start}&end_date={end}"
-                   "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
-                   "&timezone=auto")
-            url_parts.append(url)
-
-    frames = []
-    for url in url_parts:
-        try:
-            r = requests.get(url, timeout=20)
-            r.raise_for_status()
-            d = r.json().get("daily", {})
-            if d:
-                frames.append(pd.DataFrame(d))
-        except Exception:
-            continue
-
-    if not frames:
-        return None
-    df_w = pd.concat(frames, ignore_index=True).drop_duplicates(subset="time")
-    df_w["time"] = pd.to_datetime(df_w["time"])
-    df_w = df_w.sort_values("time").reset_index(drop=True)
-    return df_w
-
-
-def compute_stress(df_w, params, d_appli):
-    """Calcule les jours de stress thermique et hydrique."""
-    df_w = df_w.copy()
-    df_w["stress_chaleur"] = df_w["temperature_2m_max"] >= params["t_echaudage"]
-    df_w["stress_critique"] = df_w["temperature_2m_max"] >= params["t_critique"]
-    df_w["stress_gel"] = df_w["temperature_2m_min"] <= params["t_gel"]
-    df_w["jour_sec"] = df_w["precipitation_sum"] < params["precip_min_jour"]
-
-    # Stress hydrique = séquences de jours secs consécutifs ≥ 7 jours
-    df_w["run_id"] = (df_w["jour_sec"] != df_w["jour_sec"].shift()).cumsum()
-    run_len = df_w.groupby("run_id")["jour_sec"].transform("size")
-    df_w["stress_secheresse"] = df_w["jour_sec"] & (run_len >= 7)
-
-    return df_w
-
-
-# ══════════════════════════════════════════════════════════════════════════
-# 6. LECTURE FICHIER
+# 4. LECTURE FICHIER
 # ══════════════════════════════════════════════════════════════════════════
 if not uploaded_file:
-    st.title("🌱 Bio-Expert 360")
+    st.markdown("""
+    <div class="hero">
+        <h1>🌱 Bio-Expert 360</h1>
+        <p>Analysez vos essais terrain en quelques secondes — comparaison statistique, ANOVA spatiale et carte interactive.</p>
+    </div>
+    """, unsafe_allow_html=True)
     st.info("👈 Importez votre fichier QGIS (.zip) dans la barre latérale pour démarrer l'analyse.")
     st.markdown("""
     **Colonnes attendues dans le fichier .shp / attributs QGIS :**
@@ -243,10 +222,9 @@ if not uploaded_file:
     | `potentiel` | ⚙️ recommandé | Zone de potentiel sol (ex: Faible, Moyen, Fort) |
 
     **Ce que fait l'application :**
-    - 📊 Comparaison statistique Produit vs Témoin (test auto-sélectionné)
-    - 📐 ANOVA spatiale Traitement × Zone de potentiel (si disponible)
-    - 🗺️ Carte interactive de la parcelle (par bande et par rendement)
-    - 🌦️ Analyse météo de la période semis → récolte avec détection de stress
+    - 📊 Comparaison Produit vs Témoin avec **test choisi automatiquement** selon vos données
+    - 📐 ANOVA spatiale Traitement × Zone de potentiel (si au moins 2 zones disponibles)
+    - 🗺️ Carte interactive de la parcelle, par bande ou par rendement
     """)
     st.stop()
 
@@ -256,11 +234,18 @@ try:
         z.extractall("temp")
 
     shp_files = [f for f in os.listdir("temp") if f.endswith('.shp')]
+    if shp_files:
+        shp_files = [os.path.join("temp", f) for f in shp_files]
+    else:
+        # cherche aussi dans des sous-dossiers
+        for root, _, files in os.walk("temp"):
+            shp_files += [os.path.join(root, f) for f in files if f.endswith('.shp')]
+
     if not shp_files:
-        st.error("❌ Aucun fichier .shp trouvé dans le zip.")
+        st.error("❌ Aucun fichier .shp trouvé dans le zip (même en sous-dossier).")
         st.stop()
 
-    gdf_raw = gpd.read_file(os.path.join("temp", shp_files[0]))
+    gdf_raw = gpd.read_file(shp_files[0])
     if gdf_raw.crs is None:
         gdf_raw.crs = "EPSG:2154"
     gdf = gdf_raw.to_crs(epsg=4326)
@@ -273,18 +258,16 @@ try:
         st.error(f"❌ Colonnes manquantes : {missing}. Colonnes disponibles : {list(df.columns)}")
         st.stop()
 
-    df['rdt'] = pd.to_numeric(df['rdt'], errors='coerce')
+    df['rdt'] = pd.to_numeric(df['rdt'].astype(str).str.replace(',', '.'), errors='coerce')
     df = df.dropna(subset=['rdt'])
+
+    if df.empty:
+        st.error("❌ Aucune valeur de rendement exploitable après nettoyage de la colonne 'rdt'.")
+        st.stop()
 
 except Exception as e:
     st.error(f"❌ Erreur lecture fichier : {e}")
     st.stop()
-
-# ── Centroïde pour la météo ─────────────────────────────────────────────
-centroid_lat = float(gdf.geometry.centroid.y.mean())
-centroid_lon = float(gdf.geometry.centroid.x.mean())
-weather_lat = man_lat if manual_coords else centroid_lat
-weather_lon = man_lon if manual_coords else centroid_lon
 
 # ── Options dynamiques ───────────────────────────────────────────────────
 with st.sidebar:
@@ -318,10 +301,14 @@ gain = data_p.mean() - data_t.mean() if has_enough else 0.0
 marge = ((gain / 10) * prix_vente) - cout_prod
 
 # ══════════════════════════════════════════════════════════════════════════
-# 7. EN-TÊTE & KPIs
+# 5. EN-TÊTE & KPIs
 # ══════════════════════════════════════════════════════════════════════════
-st.title("🌱 Bio-Expert 360")
-st.caption(f"Culture : **{culture}** · Semis {d_semis.strftime('%d/%m/%Y')} → Récolte {d_recolt.strftime('%d/%m/%Y')}")
+st.markdown(f"""
+<div class="hero">
+    <h1>🌱 Bio-Expert 360</h1>
+    <p>Culture analysée : <b>{culture}</b> &nbsp;·&nbsp; Bande Produit : <b>{val_p}</b></p>
+</div>
+""", unsafe_allow_html=True)
 
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Obs. Produit", f"{n_p}")
@@ -339,7 +326,11 @@ if not has_enough:
 
 stat_res = run_main_test(data_p, data_t, alpha_v=alpha_v)
 sig = stat_res['p'] < alpha_v
+
+badge_n = '<span class="badge badge-orange">Échantillon réduit</span>' if stat_res['small_sample'] else '<span class="badge badge-blue">Test auto-adapté</span>'
 html = f"""<div class="{'verdict-sig' if sig else 'verdict-nosig'}">
+{badge_n}
+<br><br>
 <strong>{'✅ Impact Significatif' if sig else '❌ Impact Non Démontré'}</strong>
 — {stat_res['name']} · p = {stat_res['p']:.4f} · Cohen's d = {stat_res['d']:.2f} ({stat_res['label']})
 {'<br>L\'effet n\'est probablement pas dû au hasard (confiance ≥ '+str(int((1-alpha_v)*100))+'%).' if sig else '<br>La variabilité de la parcelle empêche de conclure à un effet du produit.'}
@@ -348,53 +339,58 @@ st.markdown(html, unsafe_allow_html=True)
 st.markdown("")
 
 # ══════════════════════════════════════════════════════════════════════════
-# 8. ONGLETS
+# 6. ONGLETS
 # ══════════════════════════════════════════════════════════════════════════
-tab_rdt, tab_anova, tab_map, tab_meteo = st.tabs([
+tab_rdt, tab_anova, tab_map = st.tabs([
     "📊 Résultats & Distribution",
     "📐 ANOVA Spatiale",
     "🗺️ Carte parcelle",
-    "🌦️ Météo & Stress",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────
 # TAB 1 — Distribution
 # ─────────────────────────────────────────────────────────────────────────
 with tab_rdt:
-    st.markdown("""
-    <div class="vulgarisation">
-    💡 Un seul test statistique est sélectionné automatiquement (Student, Welch, ou Mann-Whitney)
-    selon la normalité et l'homogénéité de vos données, pour vous donner une réponse claire et fiable.
-    </div>
-    """, unsafe_allow_html=True)
+    explication = (
+        "💡 Avec moins de 8 observations par groupe, le test de normalité (Shapiro) n'est pas fiable : "
+        "l'application bascule automatiquement vers le test de Mann-Whitney, plus robuste sur petits échantillons."
+        if stat_res['small_sample'] else
+        "💡 Le test est choisi automatiquement selon la normalité (Shapiro) et l'homogénéité des variances (Levene) "
+        "de vos données : Student si tout est conforme, Welch si les variances diffèrent, Mann-Whitney si la "
+        "distribution n'est pas normale."
+    )
+    st.markdown(f'<div class="vulgarisation">{explication}</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns([3, 2])
     with col1:
         fig_box = px.box(
             df_final, x="grp", y="rdt", color="grp", points="all", notched=True,
-            color_discrete_map={'Produit': '#2ecc71', 'Témoin': '#e74c3c'},
+            color_discrete_map={'Produit': '#2d6a4f', 'Témoin': '#c0392b'},
             labels={"grp": "Groupe", "rdt": "Rendement (qtx/ha)"},
             title="Distribution des rendements"
         )
+        fig_box.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#33433a')
         st.plotly_chart(fig_box, use_container_width=True)
     with col2:
         fig_viol = px.violin(
             df_final, x="grp", y="rdt", color="grp", box=True,
-            color_discrete_map={'Produit': '#2ecc71', 'Témoin': '#e74c3c'},
+            color_discrete_map={'Produit': '#2d6a4f', 'Témoin': '#c0392b'},
             labels={"grp": "Groupe", "rdt": "Rendement (qtx/ha)"},
             title="Densité de probabilité"
         )
+        fig_viol.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#33433a')
         st.plotly_chart(fig_viol, use_container_width=True)
 
     desc = df_final.groupby('grp')['rdt'].describe().round(2)
     desc.columns = ['N', 'Moyenne', 'Écart-type', 'Min', 'Q25', 'Médiane', 'Q75', 'Max']
     st.dataframe(desc, use_container_width=True)
 
-    d1, d2, d3 = st.columns(3)
-    sp_p, sp_t, lev = stat_res['shapiro_p'], stat_res['shapiro_t'], stat_res['levene_p']
-    d1.metric("Shapiro (Produit)", f"p = {sp_p:.4f}" if sp_p else "—", "✅ Normal" if (sp_p or 0) > alpha_v else "⚠️ Asymétrique")
-    d2.metric("Shapiro (Témoin)", f"p = {sp_t:.4f}" if sp_t else "—", "✅ Normal" if (sp_t or 0) > alpha_v else "⚠️ Asymétrique")
-    d3.metric("Levene (Variances)", f"p = {lev:.4f}", "✅ Homogène" if lev > alpha_v else "⚠️ Hétérogène")
+    if not stat_res['small_sample']:
+        d1, d2, d3 = st.columns(3)
+        sp_p, sp_t, lev = stat_res['shapiro_p'], stat_res['shapiro_t'], stat_res['levene_p']
+        d1.metric("Shapiro (Produit)", f"p = {sp_p:.4f}", "✅ Normal" if sp_p > alpha_v else "⚠️ Asymétrique")
+        d2.metric("Shapiro (Témoin)", f"p = {sp_t:.4f}", "✅ Normal" if sp_t > alpha_v else "⚠️ Asymétrique")
+        d3.metric("Levene (Variances)", f"p = {lev:.4f}", "✅ Homogène" if lev > alpha_v else "⚠️ Hétérogène")
 
 # ─────────────────────────────────────────────────────────────────────────
 # TAB 2 — ANOVA
@@ -403,7 +399,8 @@ with tab_anova:
     st.markdown("""
     <div class="vulgarisation">
     📐 L'ANOVA sépare ce qui revient à la qualité du sol de ce qui revient à l'effet réel du produit,
-    et révèle si le produit fonctionne différemment selon la zone de potentiel.
+    et révèle si le produit fonctionne différemment selon la zone de potentiel. Elle nécessite
+    <b>au moins 2 zones de potentiel</b> distinctes pour être informative.
     </div>
     """, unsafe_allow_html=True)
 
@@ -414,7 +411,7 @@ with tab_anova:
     else:
         anova_table, anova_title, anova_model, has_pot = run_anova_analysis(df_final, alpha_v)
         if anova_table is None:
-            st.error(f"❌ {anova_title}")
+            st.warning(f"ℹ️ {anova_title}")
         else:
             st.subheader(anova_title)
             at = anova_table.copy()
@@ -424,8 +421,8 @@ with tab_anova:
             def style_pval(val):
                 try:
                     v = float(val)
-                    if v < 0.001: return 'background-color:#d4edda; font-weight:bold; color:#155724;'
-                    if v < alpha_v: return 'background-color:#fff3cd; color:#856404;'
+                    if v < 0.001: return 'background-color:#d8f3dc; font-weight:bold; color:#1b4332;'
+                    if v < alpha_v: return 'background-color:#ffe8cc; color:#a65c00;'
                     return ''
                 except Exception:
                     return ''
@@ -447,13 +444,14 @@ with tab_anova:
 
             fig_inter = px.box(
                 df_final, x="potentiel", y="rdt", color="grp",
-                color_discrete_map={'Produit': '#2ecc71', 'Témoin': '#e74c3c'},
+                color_discrete_map={'Produit': '#2d6a4f', 'Témoin': '#c0392b'},
                 title="Le produit fonctionne-t-il mieux sur certaines zones de sol ?"
             )
+            fig_inter.update_layout(plot_bgcolor='white', paper_bgcolor='white', font_color='#33433a')
             st.plotly_chart(fig_inter, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────
-# TAB 3 — Carte parcelle (très visuelle)
+# TAB 3 — Carte parcelle
 # ─────────────────────────────────────────────────────────────────────────
 with tab_map:
     if 'geometry' not in gdf.columns or gdf.empty:
@@ -479,7 +477,7 @@ with tab_map:
             if vue.startswith("Bande"):
                 fig_map = px.scatter_mapbox(
                     gdf_plot, lat="lat", lon="lon", color="grp", size="rdt_carte", size_max=16,
-                    color_discrete_map={'Produit': '#2ecc71', 'Témoin': '#e74c3c'},
+                    color_discrete_map={'Produit': '#2d6a4f', 'Témoin': '#c0392b'},
                     mapbox_style="open-street-map", zoom=16,
                     center={"lat": center_lat, "lon": center_lon}, opacity=0.85,
                     hover_data={'bande': True, 'rdt_carte': ':.1f'},
@@ -516,131 +514,15 @@ with tab_map:
         except Exception as e:
             st.warning(f"Carte indisponible : {e}")
 
-# ─────────────────────────────────────────────────────────────────────────
-# TAB 4 — Météo & Stress
-# ─────────────────────────────────────────────────────────────────────────
-with tab_meteo:
-    st.markdown(f"""
-    <div class="vulgarisation">
-    🌦️ Analyse météo de la période <b>semis → récolte</b> au point GPS de votre parcelle
-    (lat {weather_lat:.4f}, lon {weather_lon:.4f}). Les seuils de stress sont calibrés pour la culture
-    sélectionnée : <b>{culture}</b> (chaleur ≥ {PARAM_CULTURES[culture]['t_echaudage']}°C,
-    critique ≥ {PARAM_CULTURES[culture]['t_critique']}°C, gel ≤ {PARAM_CULTURES[culture]['t_gel']}°C,
-    sécheresse = 7 jours consécutifs sans pluie significative).
-    </div>
-    """, unsafe_allow_html=True)
-
-    if d_recolt < d_semis:
-        st.error("La date de récolte doit être postérieure à la date de semis.")
-    else:
-        with st.spinner("Récupération des données météo…"):
-            df_w = fetch_weather(weather_lat, weather_lon, d_semis, d_recolt)
-
-        if df_w is None or df_w.empty:
-            st.warning("Données météo indisponibles pour cette période/localisation. "
-                       "Vérifiez vos coordonnées ou réessayez plus tard.")
-        else:
-            params = PARAM_CULTURES[culture]
-            df_w = compute_stress(df_w, params, d_appli)
-
-            nb_chaleur = int(df_w['stress_chaleur'].sum())
-            nb_critique = int(df_w['stress_critique'].sum())
-            nb_gel = int(df_w['stress_gel'].sum())
-            nb_secheresse = int(df_w['stress_secheresse'].sum())
-            total_jours = len(df_w)
-
-            stress_total = nb_critique > 0 or nb_secheresse > 0
-            html_s = f"""<div class="{'stress-high' if stress_total else 'stress-low'}">
-            <strong>{'⚠️ Stress détecté pendant le cycle' if stress_total else '✅ Aucun stress majeur détecté'}</strong>
-            — {nb_chaleur} jour(s) ≥ seuil d'échaudage, {nb_critique} jour(s) de chaleur critique,
-            {nb_gel} jour(s) de gel, {nb_secheresse} jour(s) en séquence de sécheresse, sur {total_jours} jours analysés.
-            </div>"""
-            st.markdown(html_s, unsafe_allow_html=True)
-            st.markdown("")
-
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("🔥 Jours chaleur (échaudage)", nb_chaleur)
-            m2.metric("🌡️ Jours chaleur critique", nb_critique)
-            m3.metric("❄️ Jours de gel", nb_gel)
-            m4.metric("🏜️ Jours en séquence sèche", nb_secheresse)
-
-            # ── Graphique combiné température / précipitations / stress ──
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=df_w['time'], y=df_w['precipitation_sum'], name="Précipitations (mm)",
-                marker_color='#3498db', opacity=0.5, yaxis='y2'
-            ))
-            fig.add_trace(go.Scatter(
-                x=df_w['time'], y=df_w['temperature_2m_max'], name="T° Max",
-                line=dict(color='#e74c3c', width=2), mode='lines'
-            ))
-            fig.add_trace(go.Scatter(
-                x=df_w['time'], y=df_w['temperature_2m_min'], name="T° Min",
-                line=dict(color='#5dade2', width=2), mode='lines', fill='tonexty', fillcolor='rgba(93,173,226,0.08)'
-            ))
-
-            fig.add_hline(y=params['t_echaudage'], line_dash="dash", line_color="orange",
-                          annotation_text=f"Seuil échaudage ({params['t_echaudage']}°C)")
-            fig.add_hline(y=params['t_critique'], line_dash="dash", line_color="red",
-                          annotation_text=f"Seuil critique ({params['t_critique']}°C)")
-            fig.add_hline(y=params['t_gel'], line_dash="dash", line_color="#2980b9",
-                          annotation_text=f"Seuil gel ({params['t_gel']}°C)")
-
-            # Zones de stress thermique
-            stress_days = df_w[df_w['stress_critique']]
-            for _, row in stress_days.iterrows():
-                fig.add_vrect(x0=row['time'] - pd.Timedelta(hours=12), x1=row['time'] + pd.Timedelta(hours=12),
-                              fillcolor="red", opacity=0.08, line_width=0)
-
-            # Zones de sécheresse
-            dry_days = df_w[df_w['stress_secheresse']]
-            for _, row in dry_days.iterrows():
-                fig.add_vrect(x0=row['time'] - pd.Timedelta(hours=12), x1=row['time'] + pd.Timedelta(hours=12),
-                              fillcolor="#d35400", opacity=0.06, line_width=0)
-
-            # Marqueur date d'application produit
-            appli_ts = pd.Timestamp(d_appli)
-            if df_w['time'].min() <= appli_ts <= df_w['time'].max():
-                fig.add_vline(x=appli_ts, line_dash="dot", line_color="green",
-                              annotation_text="Application produit", annotation_position="top")
-
-            fig.update_layout(
-                title="Évolution météo et zones de stress pendant le cycle cultural",
-                xaxis_title="Date", yaxis_title="Température (°C)",
-                yaxis2=dict(title="Précipitations (mm)", overlaying='y', side='right', showgrid=False),
-                height=520, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                hovermode="x unified"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            with st.expander("📋 Données météo journalières détaillées"):
-                show_cols = ['time', 'temperature_2m_max', 'temperature_2m_min', 'precipitation_sum',
-                             'stress_chaleur', 'stress_critique', 'stress_gel', 'stress_secheresse']
-                st.dataframe(df_w[show_cols].rename(columns={
-                    'time': 'Date', 'temperature_2m_max': 'T° Max', 'temperature_2m_min': 'T° Min',
-                    'precipitation_sum': 'Précip. (mm)', 'stress_chaleur': 'Stress chaleur',
-                    'stress_critique': 'Stress critique', 'stress_gel': 'Gel', 'stress_secheresse': 'Sécheresse'
-                }), use_container_width=True)
-
-            with st.expander("🔍 Comment interpréter ce graphique ?"):
-                st.markdown(f"""
-                - La courbe **rouge** = température maximale du jour ; la courbe **bleue** = température minimale.
-                - Les zones **rouges légères** marquent les jours où la chaleur a dépassé le seuil critique pour le **{culture}**
-                  (risque d'échaudage / blocage de la photosynthèse).
-                - Les zones **orange** marquent une **séquence de sécheresse** (≥ 7 jours sans pluie utile).
-                - La ligne **verte pointillée** indique votre date d'application produit : regardez si elle tombe
-                  juste avant ou pendant une période de stress, ce qui peut influencer l'efficacité du traitement.
-                """)
-
 # ══════════════════════════════════════════════════════════════════════════
-# 9. EXPORT RAPPORT
+# 7. EXPORT RAPPORT
 # ══════════════════════════════════════════════════════════════════════════
 st.divider()
 st.subheader("📤 Export des résultats")
 
 report_lines = [
     f"# Rapport Bio-Expert 360 — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-    f"**Culture** : {culture}  |  **Semis** : {d_semis}  |  **Application** : {d_appli}  |  **Récolte** : {d_recolt}",
+    f"**Culture** : {culture}  |  **Bande Produit** : {val_p}",
     "",
     "## Résultats principaux",
     f"- N Produit : {n_p}  |  N Témoin : {n_t}",
@@ -648,7 +530,7 @@ report_lines = [
     f"- Marge nette : {marge:.0f} €/ha",
     "",
     "## Statistiques",
-    f"- Test : {stat_res['name']}  |  p = {stat_res['p']:.4f}  |  {'Significatif' if sig else 'Non significatif'} (α = {alpha_v})",
+    f"- Test utilisé : {stat_res['name']}  |  p = {stat_res['p']:.4f}  |  {'Significatif' if sig else 'Non significatif'} (α = {alpha_v})",
     f"- Cohen's d : {stat_res['d']:.3f} ({stat_res['label']})",
 ]
 report_text = "\n".join(report_lines)
