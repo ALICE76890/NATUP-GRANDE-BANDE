@@ -3,7 +3,7 @@ pandas
 geopandas
 plotly
 scipy
-numpy
+requests
 statsmodels
 shapely
-rasterio
+fiona
