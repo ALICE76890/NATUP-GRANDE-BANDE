@@ -522,7 +522,7 @@ with tab_anova:
             st.info("ANOVA indisponible : Vérifiez les zones de potentiel (minimum 2 requis).")
 
 # ─────────────────────────────────────────────────────────────────────────
-# TAB 3 — Analyse ACP (Nouveau Composant d'Impact Relatif)
+# TAB 3 — Analyse ACP
 # ─────────────────────────────────────────────────────────────────────────
 with tab_pca:
     st.markdown("""
@@ -563,9 +563,18 @@ with tab_pca:
             loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
             
             fig_biplot = go.Figure()
-            fig_biplot.add_trace(go.Scatter(x=pca_res[:, 0], y=pca_res[:, 1], mode='markers',
-                                            marker=dict(color=df_features['rdt'], colorscale='Viridis', showscale=True, title="Rdt"),
-                                            name="Observations Observations"))
+            fig_biplot.add_trace(go.Scatter(
+                x=pca_res[:, 0], 
+                y=pca_res[:, 1], 
+                mode='markers',
+                marker=dict(
+                    color=df_features['rdt'], 
+                    colorscale='Viridis', 
+                    showscale=True, 
+                    colorbar=dict(title="Rdt")
+                ),
+                name="Observations"
+            ))
             
             for i, feature in enumerate(features):
                 fig_biplot.add_trace(go.Scatter(x=[0, loadings[i, 0]], y=[0, loadings[i, 1]], mode='lines+markers+text',
@@ -578,7 +587,6 @@ with tab_pca:
                                      plot_bgcolor='white', paper_bgcolor='white')
             st.plotly_chart(fig_biplot, use_container_width=True)
             
-            # Message d'aide à l'interprétation
             prod_weight = abs(loadings[0, 0])
             sol_weight = abs(loadings[1, 0])
             if prod_weight > sol_weight:
@@ -589,7 +597,7 @@ with tab_pca:
             st.info("Données factorielles croisées insuffisantes pour projeter l'ACP.")
 
 # ─────────────────────────────────────────────────────────────────────────
-# TAB 4 — Météo & Stress (Origine Open-Meteo & ERA5 explicitée)
+# TAB 4 — Météo & Stress
 # ─────────────────────────────────────────────────────────────────────────
 with tab_meteo:
     st.markdown("""
