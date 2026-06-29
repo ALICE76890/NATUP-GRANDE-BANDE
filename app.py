@@ -303,7 +303,7 @@ def compute_stress(df_w, params, jours_secheresse=7):
 if not uploaded_file:
     st.markdown("""
     <div class="hero">
-        <h1>🌱 Bio-Expert 360</h1>
+        <h1>🌱 NATUP Grande Bande</h1>
         <p>Analysez vos essais terrain en quelques secondes — comparaison statistique, ANOVA spatiale et météo de la parcelle.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -395,7 +395,7 @@ marge = ((gain / 10) * prix_vente) - cout_prod
 # ══════════════════════════════════════════════════════════════════════════
 st.markdown(f"""
 <div class="hero">
-    <h1>🌱 Bio-Expert 360</h1>
+    <h1>🌱 NATUP Grande Bande</h1>
     <p>Culture analysée : <b>{culture}</b> &nbsp;·&nbsp; Bande Produit : <b>{val_p}</b></p>
 </div>
 """, unsafe_allow_html=True)
