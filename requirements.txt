@@ -1,7 +1,8 @@
-streamlit
-pandas
-plotly
-scipy
-statsmodels
 pyshp
+statsmodels
+scikit-learn
+fpdf2
+plotly
+pandas
+numpy
 requests
