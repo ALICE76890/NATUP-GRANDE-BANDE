@@ -662,7 +662,7 @@ st.divider()
 st.subheader("📤 Export des résultats")
 
 report_lines = [
-    f"# Rapport Bio-Expert 360 — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+    f"# Rapport NATUP Grande Bande — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
     f"**Culture** : {culture}  |  **Bande Produit** : {val_p}",
     f"**Semis** : {d_semis}  |  **Application** : {d_appli}  |  **Récolte** : {d_recolt}",
     "",
