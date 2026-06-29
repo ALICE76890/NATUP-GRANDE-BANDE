@@ -117,7 +117,7 @@ PARAM_CULTURES = {
 # 2. SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## 🌱 Bio-Expert 360")
+    st.markdown("## 🌱 NATUP Analyse Grande Bande")
     st.caption("Analyse statistique d'essais en bandes — v5.0")
     st.divider()
 
