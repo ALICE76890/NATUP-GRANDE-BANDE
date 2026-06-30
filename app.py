@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 # ══════════════════════════════════════════════════════════════════════════
 # 1. CONFIG PAGE & STYLE
 # ══════════════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="Bio-Expert 360", layout="wide", page_icon="🌱",
+st.set_page_config(page_title="Précis'Up", layout="wide", page_icon="🌱",
                     initial_sidebar_state="expanded")
 
 # ── Imports critiques protégés : jamais un écran "Oh no" vide ─────────────
@@ -117,7 +117,7 @@ PARAM_CULTURES = {
 # 2. SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## 🌱 Bio-Expert 360")
+    st.markdown("## 🌱 Précis'Up")
     st.caption("Analyse statistique d'essais en bandes — v5.0")
     st.divider()
 
@@ -303,7 +303,7 @@ def compute_stress(df_w, params, jours_secheresse=7):
 if not uploaded_file:
     st.markdown("""
     <div class="hero">
-        <h1>🌱 Bio-Expert 360</h1>
+        <h1>🌱 Précis'Up</h1>
         <p>Analysez vos essais terrain en quelques secondes — comparaison statistique, ANOVA spatiale et météo de la parcelle.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -395,7 +395,7 @@ marge = ((gain / 10) * prix_vente) - cout_prod
 # ══════════════════════════════════════════════════════════════════════════
 st.markdown(f"""
 <div class="hero">
-    <h1>🌱 Bio-Expert 360</h1>
+    <h1>🌱 Précis'Up</h1>
     <p>Culture analysée : <b>{culture}</b> &nbsp;·&nbsp; Bande Produit : <b>{val_p}</b></p>
 </div>
 """, unsafe_allow_html=True)
@@ -662,7 +662,7 @@ st.divider()
 st.subheader("📤 Export des résultats")
 
 report_lines = [
-    f"# Rapport Bio-Expert 360 — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+    f"# Rapport Précis'Up — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
     f"**Culture** : {culture}  |  **Bande Produit** : {val_p}",
     f"**Semis** : {d_semis}  |  **Application** : {d_appli}  |  **Récolte** : {d_recolt}",
     "",
@@ -679,7 +679,7 @@ report_text = "\n".join(report_lines)
 st.download_button(
     "⬇️ Télécharger le rapport (.md)",
     report_text.encode("utf-8"),
-    file_name=f"bio_expert_360_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+    file_name=f"Précis'Up_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
     mime="text/markdown"
 )
 
