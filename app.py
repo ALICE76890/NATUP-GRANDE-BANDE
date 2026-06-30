@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore')
 # ══════════════════════════════════════════════════════════════════════════
 # 1. CONFIG PAGE & STYLE
 # ══════════════════════════════════════════════════════════════════════════
-st.set_page_config(page_title="NATUP Analyse Grande Bande", layout="wide", page_icon="🌱",
+st.set_page_config(page_title="Bio-Expert 360", layout="wide", page_icon="🌱",
                     initial_sidebar_state="expanded")
 
 # ── Imports critiques protégés : jamais un écran "Oh no" vide ─────────────
@@ -117,7 +117,7 @@ PARAM_CULTURES = {
 # 2. SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## 🌱 NATUP Analyse Grande Bande")
+    st.markdown("## 🌱 Bio-Expert 360")
     st.caption("Analyse statistique d'essais en bandes — v5.0")
     st.divider()
 
@@ -303,7 +303,7 @@ def compute_stress(df_w, params, jours_secheresse=7):
 if not uploaded_file:
     st.markdown("""
     <div class="hero">
-        <h1>🌱 NATUP Grande Bande</h1>
+        <h1>🌱 Bio-Expert 360</h1>
         <p>Analysez vos essais terrain en quelques secondes — comparaison statistique, ANOVA spatiale et météo de la parcelle.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -393,22 +393,10 @@ marge = ((gain / 10) * prix_vente) - cout_prod
 # ══════════════════════════════════════════════════════════════════════════
 # 6. EN-TÊTE & KPIs
 # ══════════════════════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════════════════════
-# 6. EN-TÊTE & KPIs
-# ══════════════════════════════════════════════════════════════════════════
-
-# Mettez l'URL brute de votre logo GitHub ici (Clic droit sur GitHub -> Copier l'adresse de l'image)
-# Si vous n'avez pas encore l'URL, vous pouvez utiliser ce code HTML qui intègre le logo directement dans le coin droit
-URL_LOGO = "https://raw.githubusercontent.com/ALICE76890/NATUP-GRANDE-BANDE/main/logo.png"
-
 st.markdown(f"""
-<div class="hero" style="position: relative; overflow: hidden; padding: 28px 32px; margin-bottom: 22px;">
-    <img src="{URL_LOGO}" style="float: right; height: 60px; max-width: 150px; object-fit: contain; margin-left: 20px; border-radius: 4px;" onerror="this.style.display='none'">
-    <div style="float: left;">
-        <h1>🌱 NATUP Grande Bande</h1>
-        <p>Culture analysée : <b>{culture}</b> &nbsp;·&nbsp; Bande Produit : <b>{val_p}</b></p>
-    </div>
-    <div style="clear: both;"></div>
+<div class="hero">
+    <h1>🌱 Bio-Expert 360</h1>
+    <p>Culture analysée : <b>{culture}</b> &nbsp;·&nbsp; Bande Produit : <b>{val_p}</b></p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -674,7 +662,7 @@ st.divider()
 st.subheader("📤 Export des résultats")
 
 report_lines = [
-    f"# Rapport NATUP Grande Bande — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+    f"# Rapport Bio-Expert 360 — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
     f"**Culture** : {culture}  |  **Bande Produit** : {val_p}",
     f"**Semis** : {d_semis}  |  **Application** : {d_appli}  |  **Récolte** : {d_recolt}",
     "",
